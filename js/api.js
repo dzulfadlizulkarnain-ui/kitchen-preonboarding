@@ -64,8 +64,11 @@ async function mock(b) {
     const day0 = (days) => new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
     demo = { FORMS, fieldsOf, missingFor, notReady, n: 0,
       files: { "demo-pic": { mime: "image/png", b64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" } },
-      moves: [{ date: day0(-14), days: 14, site: "S8", kitchen: "K2", brand: "Demo Bakery" }, { date: day0(-9), days: 9, site: "S8", kitchen: "K5", brand: "Demo Kitchen Co" },
-              { date: day0(-3), days: 3, site: "S1", kitchen: "K2", brand: "Demo Satay" }, { date: day0(-21), days: 21, site: "S8", kitchen: "K4", brand: "Demo Noodle House" }, { date: day0(-60), days: 60, site: "S1", kitchen: "K3", brand: "Demo Cafe" }],
+      // due 14 days before access, or on the last off-boarding when that is later (Dzul's rules, 21 Oct 2026); K4's previous licensee leaves 5 days before the move
+      moves: [[14, "S8", "K2", "Demo Bakery"], [9, "S8", "K5", "Demo Kitchen Co"], [3, "S1", "K2", "Demo Satay"], [21, "S8", "K4", "Demo Noodle House", 16], [60, "S1", "K3", "Demo Cafe"]].map(([days, site, kitchen, brand, outDays]) => {
+        const dueDays = outDays != null && outDays > days - 14 ? outDays : days - 14;
+        return { date: day0(-days), days, site, kitchen, brand, due: day0(-dueDays), dueDays, rule: outDays != null && outDays > days - 14 ? "after the previous licensee leaves" : "14 days before access" };
+      }),
       rows: [seed("S1", "K2", "Demo Satay", 12, day(-3), allYes()), seed("S8", "K5", "Demo Kitchen Co", 4, day(-9), Object.assign(allYes(), { chiller_ready: "N", chiller_note: "Gasket to be replaced, cleaning booked", tablet_ready: "N", tablet_issue: "Not required by licensee" })),
         seed("S8", "K2", "Demo Bakery", 1, day(-14), Object.assign(allYes(), { status: "draft", completed_at: "", pdf: "", by: "Demo Auditor", lights_ok: "", door_ok: "", floorplan_match: "" }))],
       names: ["Demo Auditor", "Demo Supervisor"],

@@ -118,20 +118,22 @@ function renderHome() {
       list.append(el("div", { class: "listhead" }, "In progress"));
       drafts.forEach(i => list.append(row(i, `${i.kitchen} · ${i.brand}`, `${where(i)} · started ${fmtDate(i.date)} by ${i.by}` + (i.access_date ? ` · access ${fmtDate(i.access_date)}` : ""))));
     }
-    // the kitchens a licensee moves into soon, from the contract list: each shows the check made for it, or starts one pre-filled
-    const moves = (App.moves || []).filter(m => !App.site || m.site === App.site), near = App.site ? moves : moves.filter(m => m.days <= 30), later = moves.length - near.length;
-    list.append(el("div", { class: "listhead" }, "Move-ins coming up"));
+    // the kitchens a licensee moves into soon, from the contract list, each with its due date (14 days before access, or the kitchen's last
+    // off-boarding when that is later; a kitchen already on-boarded is not listed) and the check made for it, or Start pre-filled
+    const moves = (App.moves || []).filter(m => !App.site || m.site === App.site), near = App.site ? moves : moves.filter(m => m.dueDays <= 30), later = moves.length - near.length;
+    list.append(el("div", { class: "listhead" }, "Pre-onboardings due"));
     if (App.movesError) list.append(el("div", { class: "note small" }, "Move-ins unavailable: " + App.movesError));
-    else if (!near.length) list.append(el("p", { class: "empty" }, later ? `None in the next 30 days. ${later} later: pick a site to see them.` : "No move-ins listed for this site in the next 90 days."));
+    else if (!near.length) list.append(el("p", { class: "empty" }, later ? `None due in the next 30 days. ${later} later: pick a site to see them.` : "No move-ins listed for this site in the next 90 days."));
     near.forEach(m => {
-      const d = new Date(m.date + "T12:00:00"), when = m.days < 0 ? `${-m.days} days ago` : m.days === 0 ? "today" : m.days === 1 ? "tomorrow" : `in ${m.days} days`;
-      const c = m.check, status = !c ? "Not checked yet" : c.status === "done" ? `Checked by ${c.by}` : `Check in progress by ${c.by}`;
+      const due = new Date(m.due + "T12:00:00"), dd = m.dueDays;
+      const dueWhen = dd < 0 ? `${-dd} day${dd === -1 ? "" : "s"} overdue` : dd === 0 ? "due today" : dd === 1 ? "due tomorrow" : `due in ${dd} days`;
+      const c = m.check, status = !c ? `${dueWhen} (${m.rule})` : c.status === "done" ? `Checked by ${c.by}` : `Check in progress by ${c.by}`;
       list.append(el("button", { class: "row", type: "button", onclick: () => guard(() => !c ? openNew({ site: m.site, kitchen: m.kitchen, brand: m.brand, access: m.date }) : c.status === "done" ? openDetail(TYPE, c.id) : resumeForm(TYPE, c.id)) },
-        el("div", { class: "mv-date" }, el("span", { class: "d" }, String(d.getDate())), el("span", { class: "mo" }, d.toLocaleDateString("en-SG", { month: "short" }))),
-        el("div", { class: "row-main" }, el("div", { class: "row-title" }, `${m.kitchen} · ${m.brand}`), el("div", { class: "row-sub" }, `${m.site} ${siteName(m.site)} · access ${when} · ${status}`)),
-        el("span", { class: "badge " + (!c ? (m.days <= 7 ? "late" : "soon") : c.status === "done" ? "done" : "draft") }, !c ? "Start" : c.status === "done" ? "Done" : "Draft")));
+        el("div", { class: "mv-date" }, el("span", { class: "d" }, String(due.getDate())), el("span", { class: "mo" }, due.toLocaleDateString("en-SG", { month: "short" }))),
+        el("div", { class: "row-main" }, el("div", { class: "row-title" }, `${m.kitchen} · ${m.brand}`), el("div", { class: "row-sub" }, `${m.site} ${siteName(m.site)} · access ${fmtDate(m.date)} · ${status}`)),
+        el("span", { class: "badge " + (!c ? (dd < 0 ? "late" : dd <= 7 ? "soon" : "") : c.status === "done" ? "done" : "draft") }, !c ? (dd < 0 ? "Overdue" : dd <= 7 ? "Due soon" : "Start") : c.status === "done" ? "Done" : "Draft")));
     });
-    if (later > 0 && !App.site) list.append(el("p", { class: "muted small" }, `${later} more move-in${later > 1 ? "s" : ""} after 30 days: pick a site above to see them.`));
+    if (later > 0 && !App.site) list.append(el("p", { class: "muted small" }, `${later} more due after 30 days: pick a site above to see them.`));
     return;
   }
   const q = App.q.trim().toLowerCase();
