@@ -26,7 +26,6 @@ async function guard(fn) { try { await fn(); } catch (e) { if (e.auth) { session
 
 const TYPE = "preonboarding"; // the one form of this app; calls and record ids still carry the type, as in the handover app
 const App = { meta: null, items: [], site: "", q: "", tab: "open", cur: null, names: [] };
-const ignored = i => /^test\b/i.test(String(i.brand || "")); // TEST runs never count
 const siteName = code => { const s = (App.meta ? App.meta.sites : []).find(s => s.code === code); return s ? s.name : ""; };
 const formTitle = type => App.meta.forms[type].title;
 const kNum = k => Number(String(k).replace(/\D/g, "")) || 0;
@@ -274,11 +273,12 @@ function missingFor(type, item) {
   }).map(f => f.label);
 }
 const PROBLEM_KEY = /_(ready|ok|clean|done|match|dismantle)$/; // the same rule as the backend: "issued?", "needed?" and "repair needed?" are not problems
+const NOTHING = /^(-+|nil|n\.?a\.?|n\/a|none|no|0+|pending)$/i; // a remark that says nothing, left out as the backend leaves it out
 function notReady(type, item) { // every No that is a problem, with the remark that goes with it and whether a repair was raised
   const byKey = {}; fields(type).forEach(f => { byKey[f.key] = f; });
   const said = k => String(item[k] == null ? "" : item[k]).trim();
   return fields(type).filter(f => f.type === "yesno" && PROBLEM_KEY.test(f.key) && activeField(f, item) && said(f.key).toUpperCase() === "N").map(f => {
-    const base = f.key.replace(PROBLEM_KEY, ""), note = ["_note", "_remarks", "_issue"].map(s => byKey[base + s]).find(n => n && said(n.key));
+    const base = f.key.replace(PROBLEM_KEY, ""), note = ["_note", "_remarks", "_issue"].map(s => byKey[base + s]).find(n => n && said(n.key) && !NOTHING.test(said(n.key)));
     const repair = byKey[base + "_repair"] ? said(base + "_repair").toUpperCase() : "";
     return { label: f.label, note: note ? said(note.key) : "", repair: repair === "Y" ? "repair needed, raised on Infraspeak" : repair === "N" ? "no repair needed" : "" };
   });
@@ -331,9 +331,9 @@ function linkBtn(f, item) { // a link on the form: the Ops Bot, Infraspeak, or t
         const r = await api("floorplan", { site: item.site, kitchen: item.kitchen });
         const bytes = Uint8Array.from(atob(r.b64), c => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([bytes], { type: r.mime }));
         if (/^image\//.test(r.mime)) { // the plan as a picture: the app's own viewer, pinch to zoom
-          const id = `floorplan-${item.site}-${item.kitchen}`.replace(/[^\w-]/g, "");
-          mediaCache[id] = Promise.resolve(url);
-          gallery(`Floor plan · ${item.site} ${item.kitchen}`, ["https://drive.google.com/open?id=" + id], false);
+          const ref = "https://drive.google.com/open?id=" + `floorplan-${item.site}-${item.kitchen}`.replace(/[^\w-]/g, "");
+          mediaCache[ref] = Promise.resolve(url); // mediaSrc keys its cache by the full link (review, 26 Oct 2026)
+          gallery(`Floor plan · ${item.site} ${item.kitchen}`, [ref], false);
         } else if (!window.open(url, "_blank")) toast("The PDF is ready but the browser blocked the new tab. Allow pop-ups for this site and tap again.");
       } finally { btn.disabled = false; btn.textContent = f.label; }
     });
@@ -374,7 +374,7 @@ function pump() {
   }
 }
 // where a file is: a Drive link, or an AppSheet file still in its old folder ("Preonboarding_Images/<file name>")
-const refOf = u => { const id = idFromUrl(u), p = String(u || "").trim(); return id ? { fileId: id } : /^[^\/]+\/[^\/]+\.\w+$/.test(p) ? { path: p } : null; };
+const refOf = u => { const id = idFromUrl(u), p = String(u || "").trim(); return id ? { fileId: id } : /^[^\/:]+\/[^\/]+\.\w+$/.test(p) ? { path: p } : null; }; // "missing:<path>" (a file the copy job did not find) is not available
 function showDriveImage(img, url) { img.dataset.drive = url; requestAnimationFrame(() => lazy.observe(img.parentElement || img)); }
 const VIDEO_MAX_BYTES = 20 * 1024 * 1024;
 function galleryTile(f) { // first photo as the thumbnail, a count, Add while under the maximum; tap to browse, play or delete
@@ -532,7 +532,7 @@ async function openDetail(type, id) {
   body.append(el("section", { class: "card" }, el("h2", {}, "Not ready yet"), bad.length ? el("ul", { class: "bad" }, bad.map(b => el("li", {}, badLine(b)))) : el("p", { class: "muted" }, "Everything checked was ready.")));
   App.meta.forms[type].sections.forEach(sec => {
     const card = el("section", { class: "card" }, el("h2", {}, sec.title));
-    const fs = sec.fields.filter(f => activeField(f, item) || (item[f.key] != null && String(item[f.key]).trim() !== ""));
+    const fs = sec.fields.filter(f => !["link", "note"].includes(f.type) && (activeField(f, item) || (item[f.key] != null && String(item[f.key]).trim() !== ""))); // links are buttons, not answers
     const rows = fs.filter(f => !isMedia(f)), pics = fs.filter(f => isMedia(f) && links(item[f.key]).length); // an empty photo field is not worth a tile
     if (!rows.length && !pics.length) return;
     if (rows.length) card.append(el("dl", {}, rows.map(f => [el("dt", {}, f.label), el("dd", { class: f.type === "yesno" && item[f.key] === "N" ? "no" : "" }, display(f, item[f.key]))])));

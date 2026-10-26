@@ -24,6 +24,7 @@ async function api(action, payload, attempt) {
   attempt = attempt || 0;
   try { return await apiOnce(action, payload); }
   catch (e) {
+    if (action === "discard" && attempt > 0 && /^not found/.test(e.message || "")) return { ok: true }; // the first try did it, Apps Script lost the answer
     const again = e.retry && RETRY_SAFE.includes(action) && attempt < (e.retry === "ping" ? 2 : 1);
     if (!again) throw e;
     await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
@@ -59,7 +60,7 @@ async function mock(b) {
     const seed = (site, kitchen, brand, days, access, extra) => { const d = new Date(Date.now() - days * 864e5).toISOString(); return Object.assign({ id: `PO-demo-${site}${kitchen}`, status: "done", site, kitchen, brand,
       date: d.slice(0, 10), access_date: access, by: "Demo Supervisor", created_at: d, completed_at: d, folder: "demo", pdf: "https://drive.google.com/open?id=demo-pdf", source: "" }, extra || {}); };
     const PIC = "https://drive.google.com/open?id=demo-pic"; // one invented photo stands in wherever a seed needs one
-    const allYes = () => Object.assign(Object.fromEntries(fieldsOf("preonboarding").filter(f => f.type === "yesno").map(f => [f.key, "Y"])),
+    const allYes = () => Object.assign(Object.fromEntries(fieldsOf("preonboarding").filter(f => f.type === "yesno" && !/_repair$/.test(f.key)).map(f => [f.key, "Y"])),
       Object.fromEntries(fieldsOf("preonboarding").filter(f => f.type === "photos" && f.min).map(f => [f.key, PIC])), { cages_serial: "DC 8", chiller_serial: "NA", freezer_serial: "NA" });
     const day0 = (days) => new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
     demo = { FORMS, fieldsOf, missingFor, notReady, n: 0,
@@ -69,7 +70,7 @@ async function mock(b) {
         const dueDays = outDays != null && outDays > days - 14 ? outDays : days - 14;
         return { date: day0(-days), days, site, kitchen, brand, due: day0(-dueDays), dueDays, rule: outDays != null && outDays > days - 14 ? "after the previous licensee leaves" : "14 days before access" };
       }),
-      rows: [seed("S1", "K2", "Demo Satay", 12, day(-3), allYes()), seed("S8", "K5", "Demo Kitchen Co", 4, day(-9), Object.assign(allYes(), { chiller_ready: "N", chiller_note: "Gasket to be replaced, cleaning booked", tablet_ready: "N", tablet_issue: "Not required by licensee" })),
+      rows: [seed("S1", "K2", "Demo Satay", 12, day(-3), allYes()), seed("S8", "K5", "Demo Kitchen Co", 4, day(-9), Object.assign(allYes(), { chiller_clean: "N", chiller_note: "Gasket to be replaced, cleaning booked", tablet_needed: "N", tablet_ready: "", ceiling_ok: "N", ceiling_repair: "Y" })),
         seed("S8", "K2", "Demo Bakery", 1, day(-14), Object.assign(allYes(), { status: "draft", completed_at: "", pdf: "", by: "Demo Auditor", lights_ok: "", door_ok: "", floorplan_match: "" }))],
       names: ["Demo Auditor", "Demo Supervisor"],
       sites: [{ code: "S1", name: "Demo North", address: "1 Demo Drive, Singapore 000001", kitchens: ["K1", "K2", "K3"] },
@@ -83,7 +84,7 @@ async function mock(b) {
   try {
     switch (b.action) {
       case "roster": return { names: demo.names };
-      case "login": return String(b.pin) === "1234" ? Object.assign({ token: "demo", name: b.name }, meta()) : { error: "Wrong PIN. The demo PIN is 1234." };
+      case "login": if (String(b.pin) !== "1234") return { error: "Wrong PIN. The demo PIN is 1234." }; demo.user = b.name; return Object.assign({ token: "demo", name: b.name }, meta());
     }
     if (b.token !== "demo") return { error: "Session expired. Log in again.", auth: true };
     switch (b.action) {
@@ -97,7 +98,7 @@ async function mock(b) {
         const mv = demo.moves.find(m => m.site === b.site && m.kitchen === b.kitchen), date = b.date || today, brand = b.brand || (mv && mv.brand) || "TBC";
         const open = demo.rows.find(r => r.status === "draft" && r.site === b.site && r.kitchen === b.kitchen);
         if (open) return { item: open, existing: true };
-        const item = { id: "PO-" + date.replace(/-/g, "") + "-" + (++demo.n), status: "draft", site: b.site, kitchen: b.kitchen, brand, date, by: "Demo Auditor",
+        const item = { id: "PO-" + date.replace(/-/g, "") + "-" + (++demo.n), status: "draft", site: b.site, kitchen: b.kitchen, brand, date, by: demo.user || "Demo Auditor",
           created_at: new Date().toISOString(), completed_at: "", folder: "demo", pdf: "", source: "", access_date: b.access_date || (mv && mv.date) || "" };
         demo.rows.push(item);
         return { item };
