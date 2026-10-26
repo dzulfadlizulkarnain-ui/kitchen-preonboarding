@@ -61,7 +61,7 @@ async function mock(b) {
       date: d.slice(0, 10), access_date: access, by: "Demo Supervisor", created_at: d, completed_at: d, folder: "demo", pdf: "https://drive.google.com/open?id=demo-pdf", source: "" }, extra || {}); };
     const PIC = "https://drive.google.com/open?id=demo-pic"; // one invented photo stands in wherever a seed needs one
     const allYes = () => Object.assign(Object.fromEntries(fieldsOf("preonboarding").filter(f => f.type === "yesno" && !/_repair$/.test(f.key)).map(f => [f.key, "Y"])),
-      Object.fromEntries(fieldsOf("preonboarding").filter(f => f.type === "photos" && f.min).map(f => [f.key, PIC])), { cages_serial: "DC 8", chiller_serial: "NA", freezer_serial: "NA" });
+      Object.fromEntries(fieldsOf("preonboarding").filter(f => (f.type === "photos" || f.type === "video") && f.min).map(f => [f.key, PIC])), { cages_serial: "DC 8", chiller_serial: "NA", freezer_serial: "NA" });
     const day0 = (days) => new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
     demo = { FORMS, fieldsOf, missingFor, notReady, n: 0,
       files: { "demo-pic": { mime: "image/png", b64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" } },
